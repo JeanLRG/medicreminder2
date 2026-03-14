@@ -1,0 +1,7 @@
+package com.example.medicreminder2
+
+import io.flutter.embedding.android.FlutterActivity
+
+class MainActivity: FlutterActivity() {
+
+}

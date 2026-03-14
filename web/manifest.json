@@ -1,0 +1,60 @@
+@'
+{
+  "name": "MedicReminder",
+  "short_name": "MedReminder",
+  "description": "Aplicativo de lembretes de medicação",
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#2E7D32",
+  "background_color": "#FFFFFF",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "icons/icon-72x72.png",
+      "sizes": "72x72",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "categories": ["health", "medical", "productivity"],
+  "shortcuts": [
+    {
+      "name": "Adicionar medicamento",
+      "short_name": "Novo",
+      "description": "Adicionar novo medicamento",
+      "url": "/add-medication"
+    }
+  ]
+}
+'@ | Set-Content -Path "web\manifest.json" -Encoding UTF8
+
+# 7.2. Configure o service worker
+@'
+// Service Worker para MedicReminder PWA
+self.addEventListener("install", (event) => {
+  console.log("Service Worker: Instalando...");
+  self.skipWaiting();
+});
+
+self.addEventListener("activate", (event) => {
+  console.log("Service Worker: Ativado!");
+  event.waitUntil(self.clients.claim());
+});
+
+self.addEventListener("fetch", (event) => {
+  // Podemos adicionar cache estratégico aqui depois
+  event.respondWith(fetch(event.request));
+});
+'@ | Set-Content -Path "web\service_worker.js" -Encoding UTF8
+
+# 7.3. Atualize o index.html
+(Get-Content "web\index.html") -replace '<title>.*</title>', '<title>MedicReminder - Lembretes de Medicação</title>' | Set-Content "web\index.html" -Encoding UTF8
