@@ -65,6 +65,9 @@ class Medicamento extends HiveObject {
   @HiveField(17)
   int quantidadeInicial;
 
+  @HiveField(18)
+  int intervaloDias;
+
 
   Medicamento({
     required this.id,
@@ -81,6 +84,7 @@ class Medicamento extends HiveObject {
     this.tomado = false,
     this.imagemPath,
     this.intervaloHoras = 0,
+    this.intervaloDias = 0,
     this.usoContinuo = true,
     this.dataInicio,
     this.dataFim,
@@ -96,6 +100,13 @@ class Medicamento extends HiveObject {
 
     // Se tem data fim e já passou → o tratamento encerrou
     if (dataFim != null && agora.isAfter(dataFim!)) return null;
+
+    // CASO INTERVALO EM DIAS
+    if (intervaloDias > 0 && dataInicio != null) {
+      int diasPassados = agora.difference(dataInicio!).inDays;
+      int proximoMultiplo = ((diasPassados ~/ intervaloDias) + 1) * intervaloDias;
+      return dataInicio!.add(Duration(days: proximoMultiplo));
+    }
 
     // CASO 1 — INTERVALO (Ex: 8 em 8 horas)
     if (intervaloHoras > 0) {
@@ -182,6 +193,13 @@ class Medicamento extends HiveObject {
   }
 
   int get totalDosesHoje {
+    if (intervaloDias > 0) {
+      final hoje = DateTime.now();
+      if (dataInicio == null) return 0;
+      final diasDesdeInicio = hoje.difference(dataInicio!).inDays;
+      return (diasDesdeInicio % intervaloDias == 0) ? 1 : 0;
+    }
+
     if (intervaloHoras <= 0) return 1;
     if (intervaloHoras > 24) return 1;
     return (24 / intervaloHoras).floor();
@@ -209,6 +227,13 @@ class Medicamento extends HiveObject {
   }
 
   bool get podeTomarAgora {
+    if (intervaloDias > 0) {
+      final hoje = DateTime.now();
+      if (dataInicio == null) return false;
+      final diasDesdeInicio = hoje.difference(dataInicio!).inDays;
+      if (diasDesdeInicio % intervaloDias != 0) return false;
+    }
+
     if (controlarEstoque && quantidadeRestante < comprimidosPorDose) {
       return false;
     }

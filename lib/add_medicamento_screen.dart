@@ -23,6 +23,7 @@ class _AddMedicamentoScreenState extends State<AddMedicamentoScreen> {
 
   final quantidadeController = TextEditingController();
   final doseController = TextEditingController(text: "1");
+  final _intervaloDiasController = TextEditingController();
 
   TimeOfDay? _horarioSelecionado;
   List<int> diasSelecionados = [];
@@ -32,6 +33,7 @@ class _AddMedicamentoScreenState extends State<AddMedicamentoScreen> {
   final ImagePicker _picker = ImagePicker();
 
   int _intervaloHoras = 0; // 0 é horário fixo
+  int _intervaloDias = 0;
   bool _usoContinuo = true;
   DateTime? _dataInicio;
   DateTime? _dataFim;
@@ -59,6 +61,10 @@ class _AddMedicamentoScreenState extends State<AddMedicamentoScreen> {
       
       _usoContinuo = med.usoContinuo;
       _intervaloHoras = med.intervaloHoras;
+      _intervaloDias = med.intervaloDias;
+      if (_intervaloDias > 0) {
+        _intervaloDiasController.text = _intervaloDias.toString();
+      }
 
       _dataInicio = med.dataInicio;
       _dataFim = med.dataFim;
@@ -197,6 +203,19 @@ class _AddMedicamentoScreenState extends State<AddMedicamentoScreen> {
                 DropdownMenuItem(value: 12, child: Text("A cada 12 horas")),
               ],
               onChanged: (value) => setState(() => _intervaloHoras = value!),
+            ),
+
+            const SizedBox(height: 15),
+            TextField(
+              controller: _intervaloDiasController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: "Intervalo em dias (opcional)",
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (value) {
+                setState(() => _intervaloDias = int.tryParse(value) ?? 0);
+              },
             ),
 
             const SizedBox(height: 20),
@@ -365,6 +384,7 @@ class _AddMedicamentoScreenState extends State<AddMedicamentoScreen> {
       med.diasDaSemana = diasSelecionados;
       med.imagemPath = _imagemSelecionada?.path;
       med.intervaloHoras = _intervaloHoras;
+      med.intervaloDias = _intervaloDias;
       med.usoContinuo = _usoContinuo;
       med.dataInicio = _dataInicio;
       med.dataFim = _dataFim;
@@ -380,6 +400,7 @@ class _AddMedicamentoScreenState extends State<AddMedicamentoScreen> {
         _dosagemController.text,
         imagemPath: _imagemSelecionada?.path,
         intervaloHoras: _intervaloHoras,
+        intervaloDias: _intervaloDias,
         usoContinuo: _usoContinuo,
         dataInicio: _dataInicio,
         dataFim: _dataFim,

@@ -24,6 +24,13 @@ class MedicamentoProvider extends ChangeNotifier {
   String get statusSync => _statusSync;
   StreamSubscription<List<ConnectivityResult>>? _internetSubscription;
 
+  int _pontos = 0;
+  int _streak = 0;
+  DateTime? _ultimoDiaCompleto;
+
+  int get pontos => _pontos;
+  int get streak => _streak;
+
   MedicamentoProvider() {
     _inicializar();
     // Timer para atualizar contagens regressivas na UI a cada minuto
@@ -173,6 +180,7 @@ class MedicamentoProvider extends ChangeNotifier {
       {
         String? imagemPath,
         int intervaloHoras = 0,
+        int intervaloDias = 0,
         bool usoContinuo = true,
         DateTime? dataInicio,
         DateTime? dataFim,
@@ -189,6 +197,7 @@ class MedicamentoProvider extends ChangeNotifier {
       imagemPath: imagemPath,
       controlarEstoque: controlarEstoque,
       intervaloHoras: intervaloHoras,
+      intervaloDias: intervaloDias,
       usoContinuo: usoContinuo,
       dataInicio: dataInicio,
       dataFim: dataFim,
@@ -265,6 +274,7 @@ class MedicamentoProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+
   Future<void> marcarStatus(int index, bool tomou) async {
     final med = _lista[index];
     final agora = DateTime.now();
@@ -319,6 +329,29 @@ class MedicamentoProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint("Erro ao salvar registro na nuvem: $e. Adicionado à fila.");
       _adicionarAFilaSync('registro_tomada', dadosRegistro);
+    }
+
+    if (tomou) {
+      _pontos += 10;
+
+      // Verifica se completou o dia
+      final todosTomados = _lista.isNotEmpty && _lista.every((m) => m.statusHoje == 'tomou');
+
+      if (todosTomados) {
+        final hoje = DateTime.now();
+
+        // evita duplicar no mesmo dia
+        if (_ultimoDiaCompleto == null ||
+            _ultimoDiaCompleto!.day != hoje.day ||
+            _ultimoDiaCompleto!.month != hoje.month ||
+            _ultimoDiaCompleto!.year != hoje.year) {
+          
+          _pontos += 50;
+          _streak++;
+
+          _ultimoDiaCompleto = hoje;
+        }
+      }
     }
 
     notifyListeners();

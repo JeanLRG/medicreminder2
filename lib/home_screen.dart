@@ -116,7 +116,17 @@ class HomeScreen extends StatelessWidget {
           return Column(
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    Text("⭐ ${provider.pontos} pontos", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    Text("🔥 ${provider.streak} dias seguidos", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
                 child: Card(
                   elevation: 4,
                   shape: RoundedRectangleBorder(
@@ -402,21 +412,30 @@ class HomeScreen extends StatelessWidget {
                                               const SizedBox(width: 6),
 
                                               IconButton(
-                                                icon: const Icon(Icons.info_outline, color: Colors.blue, size: 28),
-                                                tooltip: "Dúvidas sobre este remédio",
-                                                onPressed: () => abrirChatbot(context, med.nome),
-                                              ),
-
-                                              IconButton(
                                                 icon: const Icon(Icons.edit_note, size: 28),
                                                 onPressed: () => Navigator.push(
                                                   context,
                                                   MaterialPageRoute(
-                                                    builder: (_) => AddMedicamentoScreen(medicamentoParaEditar: med),
+                                                    builder: (_) => AddMedicamentoScreen(
+                                                      medicamentoParaEditar: med,
+                                                    ),
                                                   ),
                                                 ),
                                               ),
                                             ],
+                                          ),
+
+                                          const SizedBox(height: 8),
+
+                                          Center(
+                                            child: TextButton.icon(
+                                              onPressed: () => abrirChatbot(context, med.nome),
+                                              icon: const Icon(Icons.location_on, color: Colors.blue),
+                                              label: const Text(
+                                                "Encontre o medicamento aqui!",
+                                                style: TextStyle(fontWeight: FontWeight.w600),
+                                              ),
+                                            ),
                                           ),
                                         ],
                                       ),
