@@ -365,7 +365,7 @@ class MedicamentoProvider extends ChangeNotifier {
       await Supabase.instance.client.from('medicamento').delete().eq('id', med.id);
     } catch (e) {
       debugPrint("Erro ao remover na nuvem.");
-      // Opcional: Adicionar o comando de delete na fila de sincronização
+    
     }
 
     await carregarMedicamentos();

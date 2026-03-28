@@ -15,8 +15,8 @@ Future<void> main() async {
   await Hive.initFlutter();
 
   await Supabase.initialize(
-    url: 'https://okqjugerjvxupcfntssq.supabase.co',
-    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9rcWp1Z2VyanZ4dXBjZm50c3NxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc4NTMxNDEsImV4cCI6MjA4MzQyOTE0MX0.EMS_M73dbVaaOZO4tI5WGDeEVwkOYt6I0fUkQoEX354',
+    url: "SaiDaqui",
+    anonKey: "Saia",
   );
 
   await NotificationService().initNotification();

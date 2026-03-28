@@ -164,10 +164,8 @@ class NotificationService {
         contador++;
       }
     }
+  
 
-    // ==============================
-    // 🟢 MODO DIAS DA SEMANA
-    // ==============================
     else if (diasDaSemana != null && diasDaSemana.isNotEmpty) {
       for (int dia in diasDaSemana) {
         int idUnico = (baseId % 10000) * 10 + dia;

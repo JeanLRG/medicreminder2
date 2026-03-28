@@ -189,6 +189,48 @@ class _AddMedicamentoScreenState extends State<AddMedicamentoScreen> {
               ],
             ),
 
+            DropdownButtonFormField<String>(
+              value: _tipoAgendamento,
+              decoration: const InputDecoration(border: OutlineInputBorder()),
+              items: const [
+                DropdownMenuItem(value: "horario", child: Text("Horário específico")),
+                DropdownMenuItem(value: "intervalo_horas", child: Text("Intervalo em horas")),
+                DropdownMenuItem(value: "intervalo_dias", child: Text("Intervalo em dias")),
+                DropdownMenuItem(value: "data_especifica", child: Text("Data específica")),
+              ],
+              onChanged: (value) => setState(() => _tipoAgendamento = value!),
+            ),
+
+            TextField(
+              keyboardType: TextInputType.number,
+              decoration: const InputDedcoratio(labelText: "Intervalo em dias"),
+              inChanged: (v) {
+                _intervaloDias = int.tryParse(v) ?? 0;
+              },
+            ),
+
+            OutlineButton(
+              onPressed: () async {
+                final data = await showDatePicker(
+                  context: xontext,
+                  initialDate: DateTime.now(),
+                  firstDate: DateTime(2023),
+                  lastDate: DateTime(2100),
+                );
+
+                if (data != null) {
+                  setState(() {
+                    _proximaDataEspecifica = data;
+                  });
+                }
+              },
+              child: Text(
+                _proximaDataEspecifica == null
+                ? "Selecionar data"
+                : "${_proximaDataEspecifica!.day}/${_proximaDataEspecifica!.month}/${_proximaDataEspecifica!.year}",
+              )
+            ),
+
             const SizedBox(height: 15),
             const Text("Frequência", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 10),

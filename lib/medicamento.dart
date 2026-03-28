@@ -68,6 +68,16 @@ class Medicamento extends HiveObject {
   @HiveField(18)
   int intervaloDias;
 
+  @HiveField(19)
+  String tipoAgendamento;
+  // "horário", "intervalo_horas", "intervalo_dias", "data_específica"
+
+  @HiveField(20)
+  int intervaloDias;
+
+  @HiveField(21)
+  DateTime? proximaDataEspecifica;
+
 
   Medicamento({
     required this.id,
@@ -88,6 +98,8 @@ class Medicamento extends HiveObject {
     this.usoContinuo = true,
     this.dataInicio,
     this.dataFim,
+    this.tipoAgendamento = "horario",
+    this.proximaDataEspecifica,
     List<RegistroTomada>? historico,
   }) : historico = historico ?? [];
 
@@ -97,6 +109,18 @@ class Medicamento extends HiveObject {
 
   DateTime? get proximaDose {
     final agora = DateTime.now();
+
+    if (tipoAgendamento == "data_especifica" && proximaDataEspecifica != null) {
+      return proximaDataEspecifica;
+    }
+
+    if (tipoAgendamento == "intervalo_dias" && dataInicio != null) {
+      final agora = DateTime.now();
+
+      int diasPassados = agora.difference(dataInicio!).inDays;
+      int proximoMultiplo = ((diasPassados ~/ intervaloDias) + 1) * intervaloDias;
+      return dataInicio!.add(Duration(days: proximoMultiplo));
+    }
 
     // Se tem data fim e já passou → o tratamento encerrou
     if (dataFim != null && agora.isAfter(dataFim!)) return null;
@@ -227,6 +251,19 @@ class Medicamento extends HiveObject {
   }
 
   bool get podeTomarAgora {
+    if (tipoAgendamento == "data_especifica" && proximaDataEspecifica != null) {
+      final agora = DateTime.now();
+      
+      return agora.osAfter(proximaDataEspecifica!);
+    }
+
+    if (tipoAgendamento == "intervalo_dias" && dataInicio != null) {
+      fonal hoje = DateTime.now();
+      final diasDesdeInicio = hoje.difference(dataInicio!).inDays;
+
+      return diasDesdeInicio % intervaloDias == 0;
+    }
+
     if (intervaloDias > 0) {
       final hoje = DateTime.now();
       if (dataInicio == null) return false;
