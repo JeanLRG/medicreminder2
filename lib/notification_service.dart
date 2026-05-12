@@ -112,10 +112,18 @@ class NotificationService {
 
     // 🟢 Modo Dias da Semana
     List<int>? diasDaSemana,
+
+    // 🟣 Dados da Dose
+    String dosagem = "",
+    int comprimidosPorDose = 1,
   }) async {
     final partes = horario.split(':');
     final hora = int.parse(partes[0]);
     final minuto = int.parse(partes[1]);
+
+    final textoDose = comprimidosPorDose > 1 ? "$comprimidosPorDose comprimidos" : "1 comprimido";
+    final textoDosagem = dosagem.isNotEmpty ? " ($dosagem)" : "";
+    final descDose = "$textoDose$textoDosagem";
 
     int baseId = id.hashCode.abs();
 
@@ -142,7 +150,7 @@ class NotificationService {
         await notificationsPlugin.zonedSchedule(
           baseId + contador,
           'Hora do Remédio: $nome',
-          'Não esqueça de tomar a dose de $nome',
+          'Não esqueça de tomar $descDose',
           tz.TZDateTime.from(horarioAtual, tz.local),
           const NotificationDetails(
             android: AndroidNotificationDetails(
@@ -173,7 +181,7 @@ class NotificationService {
         await notificationsPlugin.zonedSchedule(
           idUnico,
           'É hora do seu remédio',
-          '$nome\nAgora às $horario',
+          '$nome\n$descDose - Agora às $horario',
           _proximoHorarioNoDia(dia, hora, minuto),
           const NotificationDetails(
             android: AndroidNotificationDetails(

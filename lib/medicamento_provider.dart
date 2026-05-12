@@ -27,9 +27,31 @@ class MedicamentoProvider extends ChangeNotifier {
   int _pontos = 0;
   int _streak = 0;
   DateTime? _ultimoDiaCompleto;
+  DateTime? _ultimaTomadaGlobal;
+
+  int _nivel = 1;
+  List<String> _badges = [];
 
   int get pontos => _pontos;
   int get streak => _streak;
+  int get nivel => _nivel;
+  List<String> get badges => _badges;
+
+  int get xpProximoNivel => 100 + (_nivel - 1) * 50;
+
+  int get xpAtualNoNivel {
+    int pontosRestantes = _pontos;
+    int nivelCalc = 1;
+    while (true) {
+      int xpNecessario = 100 + (nivelCalc - 1) * 50;
+      if (pontosRestantes >= xpNecessario) {
+        pontosRestantes -= xpNecessario;
+        nivelCalc++;
+      } else {
+        return pontosRestantes;
+      }
+    }
+  }
 
   MedicamentoProvider() {
     _inicializar();
@@ -58,8 +80,10 @@ class MedicamentoProvider extends ChangeNotifier {
 
     for (var med in _lista) {
       if (med.usoContinuo || (med.dataInicio != null && (med.dataFim == null || agora.isBefore(med.dataFim!)))) {
-        totalHoje++;
-        if (med.statusHoje == 'tomou') tomadosHoje++;
+        if (med.totalDosesHoje > 0) {
+          totalHoje++;
+          if (med.statusHoje == 'tomou') tomadosHoje++;
+        }
       }
     }
     return totalHoje == 0 ? 0 : (tomadosHoje / totalHoje) * 100;
@@ -115,6 +139,34 @@ class MedicamentoProvider extends ChangeNotifier {
 
       final ultima = await _repository.obterUltimaVerificacao();
       _ultimaVerificacao = ultima ?? DateTime.now();
+
+      final metricas = await _repository.obterMetricas();
+      _pontos = metricas['pontos'] ?? 0;
+      _streak = metricas['streak'] ?? 0;
+      _badges = List<String>.from(metricas['badges'] ?? []);
+      _ultimaTomadaGlobal = metricas['ultimaTomada'];
+      _ultimoDiaCompleto = metricas['ultimoDiaCompleto'];
+
+      // Recalcular nível de acordo com a nova curva de XP
+      int pontosTemp = _pontos;
+      int nivelCalculado = 1;
+      while (true) {
+        int xpNecessario = 100 + (nivelCalculado - 1) * 50;
+        if (pontosTemp >= xpNecessario) {
+          pontosTemp -= xpNecessario;
+          nivelCalculado++;
+        } else {
+          break;
+        }
+      }
+      _nivel = nivelCalculado;
+
+      if (_ultimaTomadaGlobal != null) {
+        if (DateTime.now().difference(_ultimaTomadaGlobal!).inHours > 48) {
+          _streak = 0;
+          await _repository.salvarMetricas(_pontos, _streak, _ultimaTomadaGlobal, _ultimoDiaCompleto, nivel: _nivel, badges: _badges);
+        }
+      }
 
       // MONITORAMENTO DE CONEXÃO
       _internetSubscription =
@@ -187,6 +239,8 @@ class MedicamentoProvider extends ChangeNotifier {
         int comprimidosPorDose = 1,
         bool controlarEstoque = false,
         int quantidadeInicial = 0,
+        String tipoAgendamento = "horario",
+        DateTime? proximaDataEspecifica,
       }) async {
     final novo = Medicamento(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -201,6 +255,8 @@ class MedicamentoProvider extends ChangeNotifier {
       usoContinuo: usoContinuo,
       dataInicio: dataInicio,
       dataFim: dataFim,
+      tipoAgendamento: tipoAgendamento,
+      proximaDataEspecifica: proximaDataEspecifica,
       historico: [],
       quantidadeInicial: quantidadeInicial,
       comprimidosPorDose: comprimidosPorDose,
@@ -275,7 +331,9 @@ class MedicamentoProvider extends ChangeNotifier {
   }
 
 
-  Future<void> marcarStatus(int index, bool tomou) async {
+  Future<List<String>> marcarStatus(int index, bool tomou) async {
+    List<String> conquistasAlcancadas = [];
+
     final med = _lista[index];
     final agora = DateTime.now();
 
@@ -288,7 +346,7 @@ class MedicamentoProvider extends ChangeNotifier {
 
     if (tomou && tomadasHoje >= (med.totalDosesHoje)) {
       debugPrint("Limite de doses diárias atingido para ${med.nome}");
-      return;
+      return conquistasAlcancadas;
     }
 
     med.historico.add(RegistroTomada(dataHora: agora, tomado: tomou));
@@ -298,7 +356,7 @@ class MedicamentoProvider extends ChangeNotifier {
       // Bloqueia se não tiver comprimidos suficientes
       if (med.quantidadeRestante < med.comprimidosPorDose) {
         debugPrint("Estoque insuficiente para ${med.nome}");
-        return;
+        return conquistasAlcancadas;
       }
 
       med.quantidadeRestante -= med.comprimidosPorDose;
@@ -332,7 +390,12 @@ class MedicamentoProvider extends ChangeNotifier {
     }
 
     if (tomou) {
+      if (_ultimaTomadaGlobal != null && agora.difference(_ultimaTomadaGlobal!).inHours > 48) {
+        _streak = 0;
+      }
+      
       _pontos += 10;
+      _ultimaTomadaGlobal = agora;
 
       // Verifica se completou o dia
       final todosTomados = _lista.isNotEmpty && _lista.every((m) => m.statusHoje == 'tomou');
@@ -352,9 +415,14 @@ class MedicamentoProvider extends ChangeNotifier {
           _ultimoDiaCompleto = hoje;
         }
       }
+      
+      conquistasAlcancadas = _verificarNivelEBadges();
+      
+      await _repository.salvarMetricas(_pontos, _streak, _ultimaTomadaGlobal, _ultimoDiaCompleto, nivel: _nivel, badges: _badges);
     }
 
     notifyListeners();
+    return conquistasAlcancadas;
   }
 
   Future<void> removerMedicamento(int index) async {
@@ -371,4 +439,62 @@ class MedicamentoProvider extends ChangeNotifier {
     await carregarMedicamentos();
     await _repository.reagendarTodosMedicamentos();
   }
+
+  List<String> _verificarNivelEBadges() {
+    List<String> novosBadges = [];
+    int nivelAnterior = _nivel;
+    
+    int pontosTemp = _pontos;
+    int novoNivel = 1;
+    while (true) {
+      int xpNecessario = 100 + (novoNivel - 1) * 50;
+      if (pontosTemp >= xpNecessario) {
+        pontosTemp -= xpNecessario;
+        novoNivel++;
+      } else {
+        break;
+      }
+    }
+    _nivel = novoNivel;
+
+    if (_nivel > nivelAnterior) {
+      novosBadges.add('level_up');
+    }
+
+    if (!_badges.contains('primeira_tomada') && _pontos > 0) {
+      _badges.add('primeira_tomada');
+      novosBadges.add('primeira_tomada');
+    }
+    if (!_badges.contains('em_chamas') && _streak >= 3) {
+      _badges.add('em_chamas');
+      novosBadges.add('em_chamas');
+    }
+    if (!_badges.contains('semana_perfeita') && _streak >= 7) {
+      _badges.add('semana_perfeita');
+      novosBadges.add('semana_perfeita');
+    }
+    if (!_badges.contains('mestre_da_saude') && _nivel >= 10) {
+      _badges.add('mestre_da_saude');
+      novosBadges.add('mestre_da_saude');
+    }
+    if (!_badges.contains('quinzena_perfeita') && _streak >= 15) {
+      _badges.add('quinzena_perfeita');
+      novosBadges.add('quinzena_perfeita');
+    }
+    if (!_badges.contains('mes_perfeito') && _streak >= 30) {
+      _badges.add('mes_perfeito');
+      novosBadges.add('mes_perfeito');
+    }
+    if (!_badges.contains('veterano') && _nivel >= 25) {
+      _badges.add('veterano');
+      novosBadges.add('veterano');
+    }
+    if (!_badges.contains('lenda') && _nivel >= 50) {
+      _badges.add('lenda');
+      novosBadges.add('lenda');
+    }
+    
+    return novosBadges;
+  }
 }
+

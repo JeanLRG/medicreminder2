@@ -48,8 +48,45 @@ class MedicamentoRepository {
     return DateTime.parse(str);
   }
 
+  Future<void> salvarMetricas(int pontos, int streak, DateTime? ultimaTomada, DateTime? ultimoDiaCompleto, {int nivel = 1, List<String> badges = const []}) async {
+    final box = await Hive.openBox('config');
+    await box.put('pontos', pontos);
+    await box.put('streak', streak);
+    await box.put('nivel', nivel);
+    await box.put('badges', badges);
+    if (ultimaTomada != null) {
+      await box.put('ultimaTomada', ultimaTomada.toIso8601String());
+    }
+    if (ultimoDiaCompleto != null) {
+      await box.put('ultimoDiaCompleto', ultimoDiaCompleto.toIso8601String());
+    }
+  }
 
-  // Atualiza (Resolve erro das linhas 91 e 120 do Provider)
+  Future<Map<String, dynamic>> obterMetricas() async {
+    final box = await Hive.openBox('config');
+    final pontos = box.get('pontos', defaultValue: 0);
+    final streak = box.get('streak', defaultValue: 0);
+    final nivel = box.get('nivel', defaultValue: 1);
+    final List<dynamic> rawBadges = box.get('badges', defaultValue: []);
+    final badges = rawBadges.cast<String>();
+    
+    final strUltimaTomada = box.get('ultimaTomada');
+    DateTime? ultimaTomada = strUltimaTomada != null ? DateTime.tryParse(strUltimaTomada) : null;
+    
+    final strUltimoDia = box.get('ultimoDiaCompleto');
+    DateTime? ultimoDiaCompleto = strUltimoDia != null ? DateTime.tryParse(strUltimoDia) : null;
+
+    return {
+      'pontos': pontos,
+      'streak': streak,
+      'nivel': nivel,
+      'badges': badges,
+      'ultimaTomada': ultimaTomada,
+      'ultimoDiaCompleto': ultimoDiaCompleto,
+    };
+  }
+
+
   Future<void> atualizarMedicamento(Medicamento med) async {
     await med.save();
   }
@@ -70,6 +107,8 @@ class MedicamentoRepository {
         nome: med.nome,
         horario: med.horario,
         diasDaSemana: med.diasDaSemana,
+        dosagem: med.dosagem,
+        comprimidosPorDose: med.comprimidosPorDose,
         // Se você já tiver intervaloHoras e datas no modelo, adiciona aqui
       );
     }

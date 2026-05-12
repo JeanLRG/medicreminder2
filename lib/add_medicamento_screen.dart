@@ -5,6 +5,7 @@ import 'medicamento_provider.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:path_provider/path_provider.dart';
 
 class AddMedicamentoScreen extends StatefulWidget {
   final Medicamento? medicamentoParaEditar;
@@ -34,9 +35,11 @@ class _AddMedicamentoScreenState extends State<AddMedicamentoScreen> {
 
   int _intervaloHoras = 0; // 0 é horário fixo
   int _intervaloDias = 0;
+  String _tipoAgendamento = "horario";
   bool _usoContinuo = true;
   DateTime? _dataInicio;
   DateTime? _dataFim;
+  DateTime? _proximaDataEspecifica;
 
   bool get isEditing => widget.medicamentoParaEditar != null;
 
@@ -62,6 +65,17 @@ class _AddMedicamentoScreenState extends State<AddMedicamentoScreen> {
       _usoContinuo = med.usoContinuo;
       _intervaloHoras = med.intervaloHoras;
       _intervaloDias = med.intervaloDias;
+      _tipoAgendamento = med.tipoAgendamento;
+
+      if (_intervaloHoras > 0 && _tipoAgendamento == "horario") {
+        _tipoAgendamento = "intervalo_horas";
+      } else if (_intervaloDias > 0 && _tipoAgendamento == "horario") {
+        _tipoAgendamento = "intervalo_dias";
+      } else if (med.proximaDataEspecifica != null && _tipoAgendamento == "horario") {
+        _tipoAgendamento = "data_especifica";
+      }
+
+      _proximaDataEspecifica = med.proximaDataEspecifica;
       if (_intervaloDias > 0) {
         _intervaloDiasController.text = _intervaloDias.toString();
       }
@@ -112,9 +126,24 @@ class _AddMedicamentoScreenState extends State<AddMedicamentoScreen> {
   }
 
   Future<void> _selecionarImagem() async {
-    final XFile? imagem = await _picker.pickImage(source: ImageSource.gallery);
-    if (imagem != null) {
-      setState(() => _imagemSelecionada = File(imagem.path));
+    try {
+      final XFile? imagem = await _picker.pickImage(source: ImageSource.gallery);
+      if (imagem != null) {
+        final directory = await getApplicationDocumentsDirectory();
+        final String nomeArquivo = '${DateTime.now().millisecondsSinceEpoch}_${imagem.name}';
+        final String novoCaminho = '${directory.path}/$nomeArquivo';
+        
+        await imagem.saveTo(novoCaminho);
+        
+        setState(() => _imagemSelecionada = File(novoCaminho));
+      }
+    } catch (e) {
+      debugPrint("Erro ao selecionar/salvar imagem: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Erro ao carregar a imagem. Tente outra foto.")),
+        );
+      }
     }
   }
 
@@ -142,7 +171,13 @@ class _AddMedicamentoScreenState extends State<AddMedicamentoScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(isEditing ? 'Editar Remédio' : 'Novo Remédio')),
+      appBar: AppBar(
+        title: Text(
+          isEditing ? '✏️ Editar Remédio 💊' : '➕ Adicionar Remédio 💊',
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 22),
+        ),
+        centerTitle: true,
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -150,29 +185,31 @@ class _AddMedicamentoScreenState extends State<AddMedicamentoScreen> {
           children: [
             TextField(
               controller: _nomeController,
-              style: const TextStyle(fontSize: 20),
+              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
               decoration: const InputDecoration(
-                labelText: 'Nome do remédio',
+                labelText: '💊 Nome do remédio',
+                labelStyle: TextStyle(fontSize: 20),
                 border: OutlineInputBorder(),
               ),
             ),
-            const SizedBox(height: 15),
+            const SizedBox(height: 20),
             TextField(
               controller: _dosagemController,
-              style: const TextStyle(fontSize: 20),
+              style: const TextStyle(fontSize: 22),
               decoration: const InputDecoration(
-                labelText: 'Dosagem (ex: 1 comprimido)',
+                labelText: '⚖️ Qual a quantidade? (ex: 1 comprimido)',
+                labelStyle: TextStyle(fontSize: 18),
                 border: OutlineInputBorder(),
               ),
             ),
 
-            const SizedBox(height: 25),
-            const Text("Tipo de tratamento", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 30),
+            const Text("📅 Como você vai tomar?", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
             Row(
               children: [
                 Expanded(
                   child: RadioListTile<bool>(
-                    title: const Text("Contínuo"),
+                    title: const Text("Vou tomar para sempre", style: TextStyle(fontSize: 18)),
                     value: true,
                     groupValue: _usoContinuo,
                     onChanged: (val) => setState(() => _usoContinuo = val!),
@@ -180,7 +217,7 @@ class _AddMedicamentoScreenState extends State<AddMedicamentoScreen> {
                 ),
                 Expanded(
                   child: RadioListTile<bool>(
-                    title: const Text("Temporário"),
+                    title: const Text("Tem dia para acabar", style: TextStyle(fontSize: 18)),
                     value: false,
                     groupValue: _usoContinuo,
                     onChanged: (val) => setState(() => _usoContinuo = val!),
@@ -189,91 +226,111 @@ class _AddMedicamentoScreenState extends State<AddMedicamentoScreen> {
               ],
             ),
 
+            const SizedBox(height: 10),
             DropdownButtonFormField<String>(
               value: _tipoAgendamento,
               decoration: const InputDecoration(border: OutlineInputBorder()),
+              style: const TextStyle(fontSize: 18, color: Colors.black),
               items: const [
-                DropdownMenuItem(value: "horario", child: Text("Horário específico")),
-                DropdownMenuItem(value: "intervalo_horas", child: Text("Intervalo em horas")),
-                DropdownMenuItem(value: "intervalo_dias", child: Text("Intervalo em dias")),
+                DropdownMenuItem(value: "horario", child: Text("Horário específico (ex: 08:00)")),
+                DropdownMenuItem(value: "intervalo_horas", child: Text("Intervalo em horas (ex: de 8h em 8h)")),
+                DropdownMenuItem(value: "intervalo_dias", child: Text("Intervalo em dias (ex: a cada 2 dias)")),
                 DropdownMenuItem(value: "data_especifica", child: Text("Data específica")),
               ],
               onChanged: (value) => setState(() => _tipoAgendamento = value!),
             ),
 
-            TextField(
-              keyboardType: TextInputType.number,
-              decoration: const InputDedcoratio(labelText: "Intervalo em dias"),
-              inChanged: (v) {
-                _intervaloDias = int.tryParse(v) ?? 0;
-              },
-            ),
-
-            OutlineButton(
-              onPressed: () async {
-                final data = await showDatePicker(
-                  context: xontext,
-                  initialDate: DateTime.now(),
-                  firstDate: DateTime(2023),
-                  lastDate: DateTime(2100),
-                );
-
-                if (data != null) {
-                  setState(() {
-                    _proximaDataEspecifica = data;
-                  });
-                }
-              },
-              child: Text(
-                _proximaDataEspecifica == null
-                ? "Selecionar data"
-                : "${_proximaDataEspecifica!.day}/${_proximaDataEspecifica!.month}/${_proximaDataEspecifica!.year}",
-              )
-            ),
-
-            const SizedBox(height: 15),
-            const Text("Frequência", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 10),
-            DropdownButtonFormField<int>(
-              value: _intervaloHoras,
-              decoration: const InputDecoration(border: OutlineInputBorder()),
-              items: const [
-                DropdownMenuItem(value: 0, child: Text("Horário específico")),
-                DropdownMenuItem(value: 4, child: Text("A cada 4 horas")),
-                DropdownMenuItem(value: 6, child: Text("A cada 6 horas")),
-                DropdownMenuItem(value: 8, child: Text("A cada 8 horas")),
-                DropdownMenuItem(value: 12, child: Text("A cada 12 horas")),
-              ],
-              onChanged: (value) => setState(() => _intervaloHoras = value!),
-            ),
-
-            const SizedBox(height: 15),
-            TextField(
-              controller: _intervaloDiasController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: "Intervalo em dias (opcional)",
-                border: OutlineInputBorder(),
-              ),
-              onChanged: (value) {
-                setState(() => _intervaloDias = int.tryParse(value) ?? 0);
-              },
-            ),
-
-            const SizedBox(height: 20),
-            // Horário e Dias só aparecem se for "Horário Específico"
-            if (_intervaloHoras == 0) ...[
+            if (_tipoAgendamento == "data_especifica") ...[
+              const SizedBox(height: 15),
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
-                  onPressed: _selecionarHora,
-                  icon: const Icon(Icons.access_time),
-                  label: Text(_horarioSelecionado == null
-                      ? 'Escolher horário'
-                      : 'Horário: ${_horarioSelecionado!.format(context)}'),
-                  style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 15)),
+                  onPressed: () async {
+                    final data = await showDatePicker(
+                      context: context,
+                      initialDate: DateTime.now(),
+                      firstDate: DateTime(2023),
+                      lastDate: DateTime(2100),
+                    );
+
+                    if (data != null) {
+                      setState(() {
+                        _proximaDataEspecifica = data;
+                      });
+                    }
+                  },
+                  icon: const Icon(Icons.calendar_month),
+                  label: Text(
+                    _proximaDataEspecifica == null
+                    ? "📅 Selecionar data"
+                    : "📅 Data: ${_proximaDataEspecifica!.day.toString().padLeft(2, '0')}/${_proximaDataEspecifica!.month.toString().padLeft(2, '0')}/${_proximaDataEspecifica!.year}",
+                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 20),
+                    foregroundColor: Colors.blue,
+                    side: const BorderSide(color: Colors.blue, width: 2),
+                  ),
                 ),
               ),
+            ],
+
+            if (_tipoAgendamento == "intervalo_horas") ...[
+              const SizedBox(height: 15),
+              const Text("⏳ De quantas em quantas horas?", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 10),
+              DropdownButtonFormField<int>(
+                value: _intervaloHoras == 0 ? 8 : _intervaloHoras,
+                decoration: const InputDecoration(border: OutlineInputBorder()),
+                style: const TextStyle(fontSize: 18, color: Colors.black),
+                items: const [
+                  DropdownMenuItem(value: 4, child: Text("A cada 4 horas")),
+                  DropdownMenuItem(value: 6, child: Text("A cada 6 horas")),
+                  DropdownMenuItem(value: 8, child: Text("A cada 8 horas")),
+                  DropdownMenuItem(value: 12, child: Text("A cada 12 horas")),
+                ],
+                onChanged: (value) => setState(() => _intervaloHoras = value!),
+              ),
+            ],
+
+            if (_tipoAgendamento == "intervalo_dias") ...[
+              const SizedBox(height: 15),
+              TextField(
+                controller: _intervaloDiasController,
+                keyboardType: TextInputType.number,
+                style: const TextStyle(fontSize: 20),
+                decoration: const InputDecoration(
+                  labelText: "📅 A cada quantos dias?",
+                  labelStyle: TextStyle(fontSize: 18),
+                  border: OutlineInputBorder(),
+                ),
+                onChanged: (value) {
+                  setState(() => _intervaloDias = int.tryParse(value) ?? 0);
+                },
+              ),
+            ],
+
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _selecionarHora,
+                icon: const Icon(Icons.access_time),
+                label: Text(
+                  _horarioSelecionado == null
+                      ? 'Escolher horário'
+                      : '⏰ Horário: ${_horarioSelecionado!.format(context)}',
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 20),
+                  foregroundColor: Colors.blue,
+                  side: const BorderSide(color: Colors.blue, width: 2),
+                ),
+              ),
+            ),
+            
+            if (_tipoAgendamento == "horario") ...[
               const SizedBox(height: 15),
               Wrap(
                 spacing: 8,
@@ -295,25 +352,34 @@ class _AddMedicamentoScreenState extends State<AddMedicamentoScreen> {
             ],
 
             const SizedBox(height: 20),
-            // Seletor de Datas
             Row(
               children: [
                 Expanded(
-                  child: OutlinedButton(
+                  child: OutlinedButton.icon(
                     onPressed: _selecionarDataInicio,
-                    child: Text(_dataInicio == null
-                        ? "Data Início"
-                        : "${_dataInicio!.day}/${_dataInicio!.month}/${_dataInicio!.year}"),
+                    icon: const Icon(Icons.calendar_today),
+                    label: Text(
+                      _dataInicio == null
+                          ? "📅 Início"
+                          : "${_dataInicio!.day}/${_dataInicio!.month}/${_dataInicio!.year}",
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                    style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
                   ),
                 ),
                 if (!_usoContinuo) ...[
                   const SizedBox(width: 10),
                   Expanded(
-                    child: OutlinedButton(
+                    child: OutlinedButton.icon(
                       onPressed: _selecionarDataFim,
-                      child: Text(_dataFim == null
-                          ? "Data Fim"
-                          : "${_dataFim!.day}/${_dataFim!.month}"),
+                      icon: const Icon(Icons.event_busy),
+                      label: Text(
+                        _dataFim == null
+                            ? "📅 Fim"
+                            : "${_dataFim!.day}/${_dataFim!.month}",
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                      style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
                     ),
                   ),
                 ],
@@ -331,7 +397,7 @@ class _AddMedicamentoScreenState extends State<AddMedicamentoScreen> {
                   borderRadius: BorderRadius.circular(12),
                   color: Colors.grey[100],
                 ),
-                child: _imagemSelecionada != null
+                child: _imagemSelecionada != null && _imagemSelecionada!.existsSync()
                     ? ClipRRect(
                   borderRadius: BorderRadius.circular(12),
                   child: Image.file(_imagemSelecionada!, fit: BoxFit.cover),
@@ -339,16 +405,18 @@ class _AddMedicamentoScreenState extends State<AddMedicamentoScreen> {
                     : const Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.camera_alt, size: 40, color: Colors.grey),
-                    Text("Adicionar foto do remédio"),
+                    Icon(Icons.add_a_photo, size: 50, color: Colors.blue),
+                    SizedBox(height: 10),
+                    Text("📸 Tocar para adicionar foto", style: TextStyle(fontSize: 18, color: Colors.blue, fontWeight: FontWeight.bold)),
                   ],
                 ),
               ),
             ),
 
             SwitchListTile(
-              title: Text("Controlar estoque"),
+              title: const Text("📦 Avisar quando estiver acabando?", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               value: controlarEstoque,
+              activeColor: Colors.blue,
               onChanged: (v) {
                 setState(() {
                   controlarEstoque = v;
@@ -360,27 +428,39 @@ class _AddMedicamentoScreenState extends State<AddMedicamentoScreen> {
               TextField(
                 controller: quantidadeController,
                 keyboardType: TextInputType.number,
-                decoration: InputDecoration(labelText: 'Quantidade inicial'),
+                style: const TextStyle(fontSize: 20),
+                decoration: const InputDecoration(
+                  labelText: 'Quantos comprimidos você tem agora?',
+                  labelStyle: TextStyle(fontSize: 16),
+                  border: OutlineInputBorder(),
+                ),
               ),
+              const SizedBox(height: 10),
               TextField(
                 controller: doseController,
                 keyboardType: TextInputType.number,
-                decoration: InputDecoration(labelText: 'Comprimidos por dose'),
+                style: const TextStyle(fontSize: 20),
+                decoration: const InputDecoration(
+                  labelText: 'Quantos comprimidos vai tomar por vez?',
+                  labelStyle: TextStyle(fontSize: 16),
+                  border: OutlineInputBorder(),
+                ),
               ),
             ],
 
             const SizedBox(height: 30),
             SizedBox(
               width: double.infinity,
-              height: 60,
-              child: ElevatedButton(
+              height: 80, // Botão ainda maior
+              child: ElevatedButton.icon(
                 onPressed: _salvarMedicamento,
+                icon: const Icon(Icons.save, size: 30),
+                label: const Text(' SALVAR REMÉDIO', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.blue,
                   foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), // Bordas um pouco mais arredondadas
                 ),
-                child: const Text('SALVAR REMÉDIO', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
               ),
             ),
           ],
@@ -394,20 +474,52 @@ class _AddMedicamentoScreenState extends State<AddMedicamentoScreen> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Digite o nome do remédio")));
       return;
     }
-    if (_horarioSelecionado == null && _intervaloHoras == 0) {
+    if (_tipoAgendamento == "horario") {
+      _intervaloHoras = 0;
+      _intervaloDias = 0;
+      _proximaDataEspecifica = null;
+    } else if (_tipoAgendamento == "intervalo_horas") {
+      _intervaloDias = 0;
+      _proximaDataEspecifica = null;
+      if (_intervaloHoras == 0) _intervaloHoras = 8;
+    } else if (_tipoAgendamento == "intervalo_dias") {
+      _intervaloHoras = 0;
+      _proximaDataEspecifica = null;
+    } else if (_tipoAgendamento == "data_especifica") {
+      _intervaloHoras = 0;
+      _intervaloDias = 0;
+      if (_proximaDataEspecifica != null) {
+        diasSelecionados = [_proximaDataEspecifica!.weekday];
+      }
+    }
+
+    if (_horarioSelecionado == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Selecione um horário")));
       return;
     }
-    if (_intervaloHoras == 0 && diasSelecionados.isEmpty) {
+    
+    if (_tipoAgendamento == "horario" && diasSelecionados.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Selecione pelo menos um dia da semana")),
       );
       return;
     }
+    
+    if (_tipoAgendamento == "data_especifica" && _proximaDataEspecifica == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Selecione a data específica")),
+      );
+      return;
+    }
+    
+    if (_tipoAgendamento == "intervalo_dias" && _intervaloDias <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Informe a cada quantos dias tomará o remédio")),
+      );
+      return;
+    }
 
-    final horaFormatada = _horarioSelecionado != null
-        ? "${_horarioSelecionado!.hour.toString().padLeft(2, '0')}:${_horarioSelecionado!.minute.toString().padLeft(2, '0')}"
-        : "${TimeOfDay.now().hour}:${TimeOfDay.now().minute}";
+    final horaFormatada = "${_horarioSelecionado!.hour.toString().padLeft(2, '0')}:${_horarioSelecionado!.minute.toString().padLeft(2, '0')}";
 
     final provider = context.read<MedicamentoProvider>();
 
@@ -433,6 +545,8 @@ class _AddMedicamentoScreenState extends State<AddMedicamentoScreen> {
       med.controlarEstoque = controlarEstoque;
       med.quantidadeInicial = int.tryParse(quantidadeController.text) ?? 0;
       med.comprimidosPorDose = int.tryParse(doseController.text) ?? 1;
+      med.tipoAgendamento = _tipoAgendamento;
+      med.proximaDataEspecifica = _proximaDataEspecifica;
       await provider.editarMedicamento(med);
     } else {
       await provider.adicionarNovo(
@@ -449,6 +563,8 @@ class _AddMedicamentoScreenState extends State<AddMedicamentoScreen> {
         controlarEstoque: controlarEstoque,
         comprimidosPorDose: int.tryParse(doseController.text) ?? 1,
         quantidadeInicial: int.tryParse(quantidadeController.text) ?? 0,
+        tipoAgendamento: _tipoAgendamento,
+        proximaDataEspecifica: _proximaDataEspecifica,
       );
     }
 

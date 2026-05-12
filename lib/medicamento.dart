@@ -72,9 +72,6 @@ class Medicamento extends HiveObject {
   String tipoAgendamento;
   // "horário", "intervalo_horas", "intervalo_dias", "data_específica"
 
-  @HiveField(20)
-  int intervaloDias;
-
   @HiveField(21)
   DateTime? proximaDataEspecifica;
 
@@ -114,23 +111,34 @@ class Medicamento extends HiveObject {
       return proximaDataEspecifica;
     }
 
-    if (tipoAgendamento == "intervalo_dias" && dataInicio != null) {
-      final agora = DateTime.now();
+    DateTime dataApenas(DateTime d) => DateTime(d.year, d.month, d.day);
 
-      int diasPassados = agora.difference(dataInicio!).inDays;
-      int proximoMultiplo = ((diasPassados ~/ intervaloDias) + 1) * intervaloDias;
-      return dataInicio!.add(Duration(days: proximoMultiplo));
+    if ((tipoAgendamento == "intervalo_dias" || intervaloDias > 0) && dataInicio != null) {
+      final hoje = dataApenas(agora);
+      final inicio = dataApenas(dataInicio!);
+
+      int diasPassados = hoje.difference(inicio).inDays;
+      
+      if (diasPassados < 0) {
+         // O tratamento ainda não começou, a primeira dose será o dataInicio
+         return dataInicio;
+      }
+
+      bool deveTomarHoje = (diasPassados % intervaloDias == 0);
+      bool jaTomouHoje = dosesTomadasHoje >= totalDosesHoje;
+      
+      int multiploAlvo = deveTomarHoje && !jaTomouHoje 
+          ? diasPassados 
+          : ((diasPassados ~/ intervaloDias) + 1) * intervaloDias;
+
+      final prox = dataInicio!.add(Duration(days: multiploAlvo));
+      
+      if (dataFim != null && prox.isAfter(dataFim!)) return null;
+      return prox;
     }
 
     // Se tem data fim e já passou → o tratamento encerrou
     if (dataFim != null && agora.isAfter(dataFim!)) return null;
-
-    // CASO INTERVALO EM DIAS
-    if (intervaloDias > 0 && dataInicio != null) {
-      int diasPassados = agora.difference(dataInicio!).inDays;
-      int proximoMultiplo = ((diasPassados ~/ intervaloDias) + 1) * intervaloDias;
-      return dataInicio!.add(Duration(days: proximoMultiplo));
-    }
 
     // CASO 1 — INTERVALO (Ex: 8 em 8 horas)
     if (intervaloHoras > 0) {
@@ -180,6 +188,8 @@ class Medicamento extends HiveObject {
   }
 
   String get statusHoje {
+    if (totalDosesHoje == 0) return 'nao_agendado';
+
     final hoje = DateTime.now();
 
     final registrosHoje = historico.where((r) =>
@@ -210,18 +220,52 @@ class Medicamento extends HiveObject {
 
     if (diff.isNegative) return "Disponível agora";
 
-    final h = diff.inHours;
-    final m = diff.inMinutes % 60;
+    int dias = diff.inDays;
+    int horas = diff.inHours % 24;
 
-    return h > 0 ? "em ${h}h ${m}m" : "em ${m}min";
+    if (dias >= 30) {
+      int meses = dias ~/ 30;
+      int diasRestantes = dias % 30;
+      String strMes = meses == 1 ? "1 mês" : "$meses meses";
+      String strDia = diasRestantes == 1 ? "1 dia" : "$diasRestantes dias";
+      return "em $strMes, $strDia e ${horas}h";
+    } else if (dias > 0) {
+      String strDia = dias == 1 ? "1 dia" : "$dias dias";
+      return "em $strDia e ${horas}h";
+    } else {
+      final h = diff.inHours;
+      final m = diff.inMinutes % 60;
+      return h > 0 ? "em ${h}h ${m}m" : "em ${m}min";
+    }
   }
 
   int get totalDosesHoje {
-    if (intervaloDias > 0) {
-      final hoje = DateTime.now();
+    final hoje = DateTime.now();
+
+    if (tipoAgendamento == "data_especifica") {
+      if (proximaDataEspecifica == null) return 0;
+      if (proximaDataEspecifica!.year == hoje.year && 
+          proximaDataEspecifica!.month == hoje.month && 
+          proximaDataEspecifica!.day == hoje.day) {
+        return 1;
+      }
+      return 0;
+    }
+
+    if (tipoAgendamento == "intervalo_dias" || intervaloDias > 0) {
       if (dataInicio == null) return 0;
-      final diasDesdeInicio = hoje.difference(dataInicio!).inDays;
-      return (diasDesdeInicio % intervaloDias == 0) ? 1 : 0;
+      final hojeApenas = DateTime(hoje.year, hoje.month, hoje.day);
+      final inicioApenas = DateTime(dataInicio!.year, dataInicio!.month, dataInicio!.day);
+      
+      final diasDesdeInicio = hojeApenas.difference(inicioApenas).inDays;
+      return (diasDesdeInicio >= 0 && diasDesdeInicio % intervaloDias == 0) ? 1 : 0;
+    }
+
+    if (tipoAgendamento == "horario" || intervaloHoras == 0) {
+      if (diasDaSemana.isNotEmpty && !diasDaSemana.contains(hoje.weekday)) {
+        return 0;
+      }
+      return 1;
     }
 
     if (intervaloHoras <= 0) return 1;
@@ -254,21 +298,16 @@ class Medicamento extends HiveObject {
     if (tipoAgendamento == "data_especifica" && proximaDataEspecifica != null) {
       final agora = DateTime.now();
       
-      return agora.osAfter(proximaDataEspecifica!);
+      return agora.isAfter(proximaDataEspecifica!);
     }
 
-    if (tipoAgendamento == "intervalo_dias" && dataInicio != null) {
-      fonal hoje = DateTime.now();
-      final diasDesdeInicio = hoje.difference(dataInicio!).inDays;
-
-      return diasDesdeInicio % intervaloDias == 0;
-    }
-
-    if (intervaloDias > 0) {
+    if ((tipoAgendamento == "intervalo_dias" || intervaloDias > 0) && dataInicio != null) {
       final hoje = DateTime.now();
-      if (dataInicio == null) return false;
-      final diasDesdeInicio = hoje.difference(dataInicio!).inDays;
-      if (diasDesdeInicio % intervaloDias != 0) return false;
+      final hojeApenas = DateTime(hoje.year, hoje.month, hoje.day);
+      final inicioApenas = DateTime(dataInicio!.year, dataInicio!.month, dataInicio!.day);
+      final diasDesdeInicio = hojeApenas.difference(inicioApenas).inDays;
+      
+      if (diasDesdeInicio < 0 || diasDesdeInicio % intervaloDias != 0) return false;
     }
 
     if (controlarEstoque && quantidadeRestante < comprimidosPorDose) {
@@ -308,7 +347,7 @@ class Medicamento extends HiveObject {
       );
 
       final inicioJanela = horarioHoje.subtract(Duration(hours: 2));
-      final fimJanela = horarioHoje.add(Duration(hours: 4));
+      final fimJanela = horarioHoje.add(Duration(hours: 2));
 
       return agora.isAfter(inicioJanela) && agora.isBefore(fimJanela);
     } catch (_) {
@@ -336,7 +375,21 @@ class Medicamento extends HiveObject {
       return "Atrasado ${diff.inHours.abs()}h";
     }
 
-    return "Falta ${diff.inHours}h ${diff.inMinutes % 60}m";
+    int dias = diff.inDays;
+    int horas = diff.inHours % 24;
+
+    if (dias >= 30) {
+      int meses = dias ~/ 30;
+      int diasRestantes = dias % 30;
+      String strMes = meses == 1 ? "1 mês" : "$meses meses";
+      String strDia = diasRestantes == 1 ? "1 dia" : "$diasRestantes dias";
+      return "Faltam $strMes, $strDia e ${horas}h";
+    } else if (dias > 0) {
+      String strDia = dias == 1 ? "1 dia" : "$dias dias";
+      return "Faltam $strDia e ${horas}h";
+    }
+
+    return "Faltam ${diff.inHours}h ${diff.inMinutes % 60}m";
   }
 
 
@@ -344,10 +397,12 @@ class Medicamento extends HiveObject {
     switch (statusHoje) {
       case 'pendente':
         return Colors.orange;
-      case 'tomado':
+      case 'tomou':
         return Colors.green;
       case 'pulou':
         return Colors.red;
+      case 'nao_agendado':
+        return Colors.grey;
       default:
         return Colors.grey;
     }

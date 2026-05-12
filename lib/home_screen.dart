@@ -4,9 +4,144 @@ import 'add_medicamento_screen.dart';
 import 'medicamento_provider.dart';
 import 'dart:io';
 import 'package:url_launcher/url_launcher.dart';
+import 'presentation/pages/gamification_screen.dart';
+import 'package:confetti/confetti.dart';
+import 'dart:math';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  late ConfettiController _confettiController;
+
+  @override
+  void initState() {
+    super.initState();
+    _confettiController = ConfettiController(duration: const Duration(seconds: 2));
+  }
+
+  @override
+  void dispose() {
+    _confettiController.dispose();
+    super.dispose();
+  }
+
+  void _animarETomar(int index, MedicamentoProvider provider) async {
+    final conquistas = await provider.marcarStatus(index, true);
+    _confettiController.play();
+    
+    final messages = [
+      "Parabéns por cuidar da sua saúde!",
+      "Continue assim!",
+      "Muito bem, medicação em dia!",
+      "Saúde em primeiro lugar!",
+      "Perfeito, você está no caminho certo!"
+    ];
+    messages.shuffle();
+    
+    // Esconder snackbar anterior se houver para não encavalar com os popups
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.celebration, color: Colors.white),
+            const SizedBox(width: 10),
+            Expanded(child: Text(messages.first, style: const TextStyle(fontWeight: FontWeight.bold))),
+          ],
+        ),
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+
+    if (conquistas.isNotEmpty) {
+      // Espera 1 segundo e meio para não fechar junto com a snackbar tão rápido
+      Future.delayed(const Duration(milliseconds: 1500), () {
+        if (!mounted) return;
+        
+        List<Widget> conquistasWidgets = [];
+        
+        if (conquistas.contains('level_up')) {
+          conquistasWidgets.add(_buildConquistaItem('Nível ${provider.nivel} Alcançado!', Icons.trending_up, Colors.blue));
+        }
+        if (conquistas.contains('primeira_tomada')) {
+          conquistasWidgets.add(_buildConquistaItem('1ª Tomada', Icons.star_rounded, Colors.amber));
+        }
+        if (conquistas.contains('em_chamas')) {
+          conquistasWidgets.add(_buildConquistaItem('Em Chamas (3 dias)', Icons.local_fire_department_rounded, Colors.orange));
+        }
+        if (conquistas.contains('semana_perfeita')) {
+          conquistasWidgets.add(_buildConquistaItem('Semana Perfeita (7 dias)', Icons.emoji_events_rounded, Colors.purple));
+        }
+        if (conquistas.contains('mestre_da_saude')) {
+          conquistasWidgets.add(_buildConquistaItem('Mestre da Saúde (Nv. 10)', Icons.diamond_rounded, Colors.cyan));
+        }
+
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: Row(
+              children: const [
+                Icon(Icons.emoji_events, color: Colors.amber, size: 30),
+                SizedBox(width: 10),
+                Text("Nova Conquista!"),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: conquistasWidgets,
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const GamificationScreen()));
+                },
+                child: const Text("Ver Progresso"),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text("Oba!"),
+              ),
+            ],
+          ),
+        );
+      });
+    }
+  }
+
+  Widget _buildConquistaItem(String titulo, IconData icone, Color cor) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: cor.withOpacity(0.2),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icone, color: cor, size: 30),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Text(
+              titulo,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Future<void> abrirChatbot(BuildContext context, String nomeMedicamento) async {
     final nome = Uri.encodeComponent(nomeMedicamento);
@@ -86,13 +221,28 @@ class HomeScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text(
-          'Meus Medicamentos',
-          style: TextStyle(fontWeight: FontWeight.bold),
+          '💊 Meus Medicamentos',
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24),
         ),
         centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.emoji_events_rounded, color: Colors.amber, size: 28),
+            tooltip: "Meu Progresso",
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const GamificationScreen()),
+              );
+            },
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
-      body: Consumer<MedicamentoProvider>(
-        builder: (context, provider, child) {
+      body: Stack(
+        children: [
+          Consumer<MedicamentoProvider>(
+            builder: (context, provider, child) {
           if (provider.lista.isEmpty) {
             return Center(
               child: Column(
@@ -134,49 +284,43 @@ class HomeScreen extends StatelessWidget {
                   ),
                   child: Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.all(20),
+                    padding: const EdgeInsets.all(24),
                     child: Column(
                       children: [
                         const Text(
-                          "Adesão de Hoje",
+                          "📊 Seu Progresso Hoje",
                           style: TextStyle(
-                            fontSize: 18,
+                            fontSize: 22,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        const SizedBox(height: 10),
-                        Text(
-                          "${provider.adesaoHoje.toStringAsFixed(0)}%",
-                          style: TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.bold,
-                            color: provider.adesaoHoje < 50 ? Colors.red : Colors.green,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        TweenAnimationBuilder<double>(
-                          tween: Tween<double>(
-                            begin: 0,
-                            end: provider.adesaoHoje / 100,
-                          ),
-                          duration: const Duration(milliseconds: 800),
-                          curve: Curves.easeInOut,
-                          builder: (context, value, child) {
-                            return ClipRRect(
-                              borderRadius: BorderRadius.circular(10),
-                              child: LinearProgressIndicator(
-                                value: value,
-                                minHeight: 12,
-                                backgroundColor: Colors.grey[200],
-                                color: provider.adesaoHoje < 50
-                                    ? Colors.red
-                                    : provider.adesaoHoje < 80
-                                    ? Colors.orange
-                                    : Colors.green,
+                        const SizedBox(height: 12),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              "${provider.adesaoHoje.toStringAsFixed(0)}%",
+                              style: TextStyle(
+                                fontSize: 40,
+                                fontWeight: FontWeight.bold,
+                                color: provider.adesaoHoje < 50 ? Colors.red : Colors.green,
                               ),
-                            );
-                          },
+                            ),
+                            const SizedBox(width: 12),
+                            Text(
+                              provider.adesaoHoje < 50 ? "😐" : provider.adesaoHoje < 80 ? "🙂" : "😁",
+                              style: const TextStyle(fontSize: 40),
+                            ),
+                          ],
                         ),
+                        if (provider.adesaoHoje == 100)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 8.0),
+                            child: Text(
+                              "Parabéns! Todos tomados!",
+                              style: TextStyle(color: Colors.green, fontSize: 18, fontWeight: FontWeight.w600),
+                            ),
+                          ),
                       ],
                     ),
                   ),
@@ -189,46 +333,14 @@ class HomeScreen extends StatelessWidget {
                   itemCount: provider.lista.length,
                   itemBuilder: (context, index) {
                     final med = provider.lista[index];
-                    final bool concluido = med.dosesTomadasHoje >= med.totalDosesHoje;
+                    final bool concluido = med.totalDosesHoje > 0 && med.dosesTomadasHoje >= med.totalDosesHoje;
                     final bool isPulado = med.statusHoje == 'pulou';
                     final bool aindaPodeTomar = med.podeTomarAgora;
                     final double progressoEstoque = med.quantidadeInicial == 0
                         ? 0
                         : med.quantidadeRestante / med.quantidadeInicial;
 
-                    return Dismissible(
-                      key: ValueKey(med.id),
-                      direction: DismissDirection.endToStart,
-                      background: Container(
-                        alignment: Alignment.centerRight,
-                        padding: const EdgeInsets.only(right: 20),
-                        decoration: BoxDecoration(
-                          color: Colors.red,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: const Icon(Icons.delete, color: Colors.white),
-                      ),
-                      confirmDismiss: (_) async {
-                        return await showDialog(
-                          context: context,
-                          builder: (context) => AlertDialog(
-                            title: const Text("Excluir medicamento"),
-                            content: const Text("Tem certeza que deseja remover este medicamento?"),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(context, false),
-                                child: const Text("Cancelar"),
-                              ),
-                              TextButton(
-                                onPressed: () => Navigator.pop(context, true),
-                                child: const Text("Excluir"),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                      onDismissed: (_) => provider.removerMedicamento(index),
-                      child: AnimatedContainer(
+                    return AnimatedContainer(
                         duration: const Duration(milliseconds: 300),
                         margin: const EdgeInsets.only(bottom: 16),
                         child: Card(
@@ -250,7 +362,7 @@ class HomeScreen extends StatelessWidget {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     // ✅ FOTO AUMENTADA (DE 60 PARA 80)
-                                    med.imagemPath != null
+                                    med.imagemPath != null && File(med.imagemPath!).existsSync()
                                         ? ClipRRect(
                                       borderRadius: BorderRadius.circular(12),
                                       child: Image.file(
@@ -276,18 +388,18 @@ class HomeScreen extends StatelessWidget {
                                             med.nome,
                                             style: TextStyle(
                                               fontWeight: FontWeight.bold,
-                                              fontSize: 20, // ✅ Nome um pouco maior
+                                              fontSize: 26, // ✅ Nome GIGANTE
                                               decoration: med.progressoHoje == 1
                                                   ? TextDecoration.lineThrough
                                                   : null,
                                             ),
                                           ),
 
-                                          const SizedBox(height: 4),
+                                          const SizedBox(height: 8),
 
                                           Text(
-                                            'Horário: ${med.horario}',
-                                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                                            '⏰ Horário: ${med.horario}',
+                                            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: Colors.blueAccent),
                                           ),
 
                                           if (med.controlarEstoque)
@@ -358,61 +470,80 @@ class HomeScreen extends StatelessWidget {
                                           ),
 
                                           if (med.totalDosesHoje > 1 || concluido)
-                                            Text(
-                                              "Tomado: ${med.dosesTomadasHoje}/${med.totalDosesHoje}",
-                                              style: TextStyle(
-                                                color: med.progressoHoje == 1
-                                                    ? Colors.green
-                                                    : Colors.orange,
-                                                fontWeight: FontWeight.bold,
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                              decoration: BoxDecoration(
+                                                color: concluido ? Colors.green.withOpacity(0.1) : Colors.orange.withOpacity(0.1),
+                                                borderRadius: BorderRadius.circular(8),
+                                              ),
+                                              child: Text(
+                                                "✔️ Tomados hoje: ${med.dosesTomadasHoje} de ${med.totalDosesHoje}",
+                                                style: TextStyle(
+                                                  color: med.progressoHoje == 1
+                                                      ? Colors.green
+                                                      : Colors.orange[800],
+                                                  fontSize: 18,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
                                               ),
                                             ),
 
                                           const SizedBox(height: 12),
 
+                                          // AÇÕES DO CARD
+                                          const SizedBox(height: 16),
+                                          
+                                          // BOTÃO PRINCIPAL (GIGANTE)
+                                          SizedBox(
+                                            width: double.infinity,
+                                            height: 60,
+                                            child: ElevatedButton.icon(
+                                              onPressed: aindaPodeTomar
+                                                  ? () => _animarETomar(index, provider)
+                                                  : null,
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor: Colors.green,
+                                                foregroundColor: Colors.white,
+                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                              ),
+                                              icon: const Icon(Icons.check_circle_outline, size: 30),
+                                              label: const Text(
+                                                "JÁ TOMEI!",
+                                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24),
+                                              ),
+                                            ),
+                                          ),
+                                          
                                           const SizedBox(height: 12),
-
-                                          // ✅ SEÇÃO DE BOTÕES ATUALIZADA
+                                          
+                                          // BOTÕES SECUNDÁRIOS
                                           Row(
                                             children: [
                                               Expanded(
-                                                child: ElevatedButton(
-                                                  onPressed: aindaPodeTomar
-                                                      ? () => provider.marcarStatus(index, true)
-                                                      : null,
-                                                  style: ElevatedButton.styleFrom(
-                                                    backgroundColor: Colors.green,
-                                                    foregroundColor: Colors.white,
-                                                    padding: const EdgeInsets.symmetric(vertical: 14),
-                                                  ),
-                                                  child: const Text(
-                                                    "TOMAR",
-                                                    style: TextStyle(fontWeight: FontWeight.bold),
-                                                  ),
-                                                ),
-                                              ),
-
-                                              const SizedBox(width: 8),
-
-                                              Expanded(
-                                                child: ElevatedButton(
+                                                child: OutlinedButton.icon(
                                                   onPressed: () => provider.marcarStatus(index, false),
-                                                  style: ElevatedButton.styleFrom(
-                                                    backgroundColor: Colors.orange,
-                                                    foregroundColor: Colors.white,
-                                                    padding: const EdgeInsets.symmetric(vertical: 14),
+                                                  style: OutlinedButton.styleFrom(
+                                                    foregroundColor: Colors.orange,
+                                                    side: const BorderSide(color: Colors.orange, width: 2),
+                                                    padding: const EdgeInsets.symmetric(vertical: 12),
                                                   ),
-                                                  child: const Text(
+                                                  icon: const Icon(Icons.skip_next),
+                                                  label: const Text(
                                                     "PULAR",
-                                                    style: TextStyle(fontWeight: FontWeight.bold),
+                                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                                                   ),
                                                 ),
                                               ),
-
-                                              const SizedBox(width: 6),
-
-                                              IconButton(
-                                                icon: const Icon(Icons.edit_note, size: 28),
+                                            ],
+                                          ),
+                                          
+                                          const SizedBox(height: 8),
+                                          
+                                          // BOTÕES DE GERENCIAMENTO (Editar/Excluir)
+                                          Row(
+                                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                            children: [
+                                              TextButton.icon(
                                                 onPressed: () => Navigator.push(
                                                   context,
                                                   MaterialPageRoute(
@@ -421,6 +552,34 @@ class HomeScreen extends StatelessWidget {
                                                     ),
                                                   ),
                                                 ),
+                                                icon: const Icon(Icons.edit, size: 20, color: Colors.blue),
+                                                label: const Text("Editar", style: TextStyle(color: Colors.blue, fontSize: 16)),
+                                              ),
+                                              TextButton.icon(
+                                                onPressed: () async {
+                                                  final confirm = await showDialog<bool>(
+                                                    context: context,
+                                                    builder: (context) => AlertDialog(
+                                                      title: const Text("🗑️ Excluir medicamento"),
+                                                      content: const Text("Tem certeza que deseja remover este medicamento da sua lista?", style: TextStyle(fontSize: 18)),
+                                                      actions: [
+                                                        TextButton(
+                                                          onPressed: () => Navigator.pop(context, false),
+                                                          child: const Text("Cancelar", style: TextStyle(fontSize: 18)),
+                                                        ),
+                                                        TextButton(
+                                                          onPressed: () => Navigator.pop(context, true),
+                                                          child: const Text("Excluir", style: TextStyle(color: Colors.red, fontSize: 18, fontWeight: FontWeight.bold)),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  );
+                                                  if (confirm == true) {
+                                                    provider.removerMedicamento(index);
+                                                  }
+                                                },
+                                                icon: const Icon(Icons.delete, size: 20, color: Colors.red),
+                                                label: const Text("Excluir", style: TextStyle(color: Colors.red, fontSize: 16)),
                                               ),
                                             ],
                                           ),
@@ -430,10 +589,10 @@ class HomeScreen extends StatelessWidget {
                                           Center(
                                             child: TextButton.icon(
                                               onPressed: () => abrirChatbot(context, med.nome),
-                                              icon: const Icon(Icons.location_on, color: Colors.blue),
+                                              icon: const Icon(Icons.location_on, color: Colors.blue, size: 24),
                                               label: const Text(
-                                                "Encontre o medicamento aqui!",
-                                                style: TextStyle(fontWeight: FontWeight.w600),
+                                                "📍 Onde comprar?",
+                                                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
                                               ),
                                             ),
                                           ),
@@ -448,16 +607,15 @@ class HomeScreen extends StatelessWidget {
                                   right: 8,
                                   top: 8,
                                   child: IconButton(
-                                    icon: const Icon(Icons.add_circle_outline, color: Colors.blueGrey, size: 24),
-                                    tooltip: "Adicionar comprimidos",
+                                    icon: const Icon(Icons.add_box, color: Colors.blue, size: 36),
+                                    tooltip: "Adicionar caixas",
                                     onPressed: () => _mostrarDialogReabastecer(context, provider, med),
                                   ),
                                 ),
                             ],
                           ),
                         ),
-                      ),
-                    );
+                      );
                   },
                 ),
               ),
@@ -465,13 +623,30 @@ class HomeScreen extends StatelessWidget {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      Align(
+        alignment: Alignment.topCenter,
+        child: ConfettiWidget(
+          confettiController: _confettiController,
+          blastDirection: pi / 2,
+          maxBlastForce: 20,
+          minBlastForce: 10,
+          emissionFrequency: 0.1,
+          numberOfParticles: 20,
+          gravity: 0.5,
+          colors: const [Colors.green, Colors.blue, Colors.pink, Colors.orange, Colors.purple],
+        ),
+      ),
+    ],
+  ),
+  floatingActionButton: FloatingActionButton.extended(
         onPressed: () => Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => const AddMedicamentoScreen()),
         ),
-        icon: const Icon(Icons.add),
-        label: const Text('Novo Remédio'),
+        icon: const Icon(Icons.add_circle, size: 28),
+        label: const Text('➕ Adicionar Remédio', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.blue,
+        foregroundColor: Colors.white,
       ),
     );
   }
