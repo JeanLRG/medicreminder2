@@ -72,7 +72,7 @@ class Medicamento extends HiveObject {
   String tipoAgendamento;
   // "horário", "intervalo_horas", "intervalo_dias", "data_específica"
 
-  @HiveField(21)
+  @HiveField(20)
   DateTime? proximaDataEspecifica;
 
 
@@ -107,8 +107,18 @@ class Medicamento extends HiveObject {
   DateTime? get proximaDose {
     final agora = DateTime.now();
 
+    int hora = 0;
+    int minuto = 0;
+    try {
+      final partes = horario.split(":");
+      hora = int.parse(partes[0]);
+      minuto = int.parse(partes[1]);
+    } catch (_) {}
+
+    DateTime aplicarHorario(DateTime d) => DateTime(d.year, d.month, d.day, hora, minuto);
+
     if (tipoAgendamento == "data_especifica" && proximaDataEspecifica != null) {
-      return proximaDataEspecifica;
+      return aplicarHorario(proximaDataEspecifica!);
     }
 
     DateTime dataApenas(DateTime d) => DateTime(d.year, d.month, d.day);
@@ -120,8 +130,8 @@ class Medicamento extends HiveObject {
       int diasPassados = hoje.difference(inicio).inDays;
       
       if (diasPassados < 0) {
-         // O tratamento ainda não começou, a primeira dose será o dataInicio
-         return dataInicio;
+         // O tratamento ainda não começou, a primeira dose será o dataInicio no horário agendado
+         return aplicarHorario(dataInicio!);
       }
 
       bool deveTomarHoje = (diasPassados % intervaloDias == 0);
@@ -131,7 +141,7 @@ class Medicamento extends HiveObject {
           ? diasPassados 
           : ((diasPassados ~/ intervaloDias) + 1) * intervaloDias;
 
-      final prox = dataInicio!.add(Duration(days: multiploAlvo));
+      final prox = aplicarHorario(dataInicio!.add(Duration(days: multiploAlvo)));
       
       if (dataFim != null && prox.isAfter(dataFim!)) return null;
       return prox;
@@ -142,7 +152,7 @@ class Medicamento extends HiveObject {
 
     // CASO 1 — INTERVALO (Ex: 8 em 8 horas)
     if (intervaloHoras > 0) {
-      if (historico.isEmpty) return dataInicio ?? agora;
+      if (historico.isEmpty) return dataInicio != null ? aplicarHorario(dataInicio!) : agora;
 
       // Ordena uma cópia para não alterar a lista original do Hive acidentalmente
       final copiaHistorico = List<RegistroTomada>.from(historico);
@@ -297,8 +307,23 @@ class Medicamento extends HiveObject {
   bool get podeTomarAgora {
     if (tipoAgendamento == "data_especifica" && proximaDataEspecifica != null) {
       final agora = DateTime.now();
-      
-      return agora.isAfter(proximaDataEspecifica!);
+      int hora = 0;
+      int minuto = 0;
+      try {
+        final partes = horario.split(":");
+        hora = int.parse(partes[0]);
+        minuto = int.parse(partes[1]);
+      } catch (_) {}
+      final dataHoraEspecifica = DateTime(
+        proximaDataEspecifica!.year,
+        proximaDataEspecifica!.month,
+        proximaDataEspecifica!.day,
+        hora,
+        minuto,
+      );
+      final inicioJanela = dataHoraEspecifica.subtract(const Duration(hours: 2));
+      final fimJanela = dataHoraEspecifica.add(const Duration(hours: 2));
+      return agora.isAfter(inicioJanela) && agora.isBefore(fimJanela);
     }
 
     if ((tipoAgendamento == "intervalo_dias" || intervaloDias > 0) && dataInicio != null) {

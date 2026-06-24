@@ -22,7 +22,8 @@ void main() {
         comprimidosPorDose: 1,
         controlarEstoque: false,
         quantidadeInicial: 10,
-        intervaloHoras: 4, // Tomado de 8 em 8 horas
+        intervaloHoras: 8, // Tomado de 8 em 8 horas
+        tipoAgendamento: "intervalo_horas",
       );
 
       // 2. Ação e Asserção (Equivalente ao assertEquals)
@@ -132,6 +133,7 @@ void main() {
         controlarEstoque: false,
         quantidadeInicial: 30,
         intervaloHoras: 12, // 2 doses diárias
+        tipoAgendamento: "intervalo_horas",
         historico: [
           RegistroTomada(dataHora: hoje, tomado: true), // 1 dose tomada hoje
         ],
@@ -156,9 +158,10 @@ void main() {
         controlarEstoque: false,
         quantidadeInicial: 20,
         intervaloHoras: 12, // 2 doses diárias
+        tipoAgendamento: "intervalo_horas",
         historico: [
-          RegistroTomada(dataHora: hoje.subtract(const Duration(hours: 12)), tomado: true),
-          RegistroTomada(dataHora: hoje, tomado: true),
+          RegistroTomada(dataHora: DateTime(hoje.year, hoje.month, hoje.day, 1, 0), tomado: true),
+          RegistroTomada(dataHora: DateTime(hoje.year, hoje.month, hoje.day, 13, 0), tomado: true),
         ],
       );
 
@@ -223,6 +226,31 @@ void main() {
       );
 
       expect(medicamento.podeTomarAgora, isFalse);
+    });
+  });
+
+  group('Lógica de Intervalo de Dias e Horário', () {
+    test('Deve aplicar o horário cadastrado para a data de início (futura)', () {
+      final inicioFuturo = DateTime.now().add(const Duration(days: 2));
+      final medicamento = Medicamento(
+        id: '12',
+        nome: 'Remédio Intervalo Dias',
+        horario: '12:00',
+        quantidadeRestante: 10,
+        alertaMinimo: 2,
+        alertaEstoqueEnviado: false,
+        comprimidosPorDose: 1,
+        controlarEstoque: false,
+        quantidadeInicial: 10,
+        intervaloDias: 2,
+        tipoAgendamento: 'intervalo_dias',
+        dataInicio: DateTime(inicioFuturo.year, inicioFuturo.month, inicioFuturo.day), // 00:00:00
+      );
+
+      final proxima = medicamento.proximaDose;
+      expect(proxima, isNotNull);
+      expect(proxima!.hour, equals(12));
+      expect(proxima.minute, equals(0));
     });
   });
 }

@@ -6,7 +6,7 @@ import 'registro_tomada.dart';
 class MedicamentoRepository {
   static const String _boxName = 'medicamentosBox';
 
-  // Inicializa o Hive (Resolve erro da linha 17 do Provider)
+  // Inicializa o Hive
   Future<void> init() async {
     if (!Hive.isAdapterRegistered(0)) {
       Hive.registerAdapter(MedicamentoAdapter());
@@ -106,10 +106,16 @@ class MedicamentoRepository {
         id: med.id,
         nome: med.nome,
         horario: med.horario,
+        intervaloHoras: med.intervaloHoras > 0 ? med.intervaloHoras : null,
+        intervaloDias: med.intervaloDias > 0 ? med.intervaloDias : null,
+        tipoAgendamento: med.tipoAgendamento,
+        proximaDataEspecifica: med.proximaDataEspecifica,
+        usoContinuo: med.usoContinuo,
+        dataInicio: med.dataInicio,
+        dataFim: med.dataFim,
         diasDaSemana: med.diasDaSemana,
         dosagem: med.dosagem,
         comprimidosPorDose: med.comprimidosPorDose,
-        // Se você já tiver intervaloHoras e datas no modelo, adiciona aqui
       );
     }
   }
